@@ -11,7 +11,7 @@ from scipy.optimize import minimize
 from datetime import datetime
 
 # Список тикеров
-tickers = ['LKOH', 'SBER']
+tickers = ['LKOH', 'SBER', 'GAZP']
 
 # Даты начала и конца периода
 start_date = datetime(2004, 1, 1)
