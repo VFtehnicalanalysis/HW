@@ -1,3 +1,4 @@
+import sys
 import os
 import requests
 import apimoex
@@ -19,7 +20,7 @@ def download_and_save_data(tickers, start_date, end_date):
             df['begin'] = pd.to_datetime(df['begin'])
             df.set_index('begin', inplace=True)
             df['log_return'] = np.log(df['close'] / df['close'].shift(1))
-            file_name = f'{ticker}_data.csv'
+            file_name = f'data/{ticker}_data.csv'
             if os.path.exists(file_name):
                 os.remove(file_name)
                 print(f'File {file_name} already exists. Removed.')
@@ -40,7 +41,7 @@ def download_index_data(index, start_date, end_date):
         df['begin'] = pd.to_datetime(df['begin'])
         df.set_index('begin', inplace=True)
         df['log_return'] = np.log(df['close'] / df['close'].shift(1))
-        file_name = f'{index}_data.csv'
+        file_name = f'data/{index}_data.csv'
         if os.path.exists(file_name):
             os.remove(file_name)
             print(f'File {file_name} already exists. Removed.')
