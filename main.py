@@ -9,69 +9,6 @@ import csv_downloader as dwn
 #import market_coefficients.py as mcoef
 #import market_plots.py as mplt
 
-def main():
-    # Список тикеров
-    tickers = ['LKOH', 'SBER']
-    indexes = ['MOEXREPO', 'IMOEX']
-    
-    # Даты начала и конца периода
-    start_date = datetime(2014, 5, 9)
-    end_date = datetime(2024, 5, 9)
-
-    # Загрузка и сохранение данных
-    #dwn.download_and_save_data(tickers, start_date, end_date)
-    #dwn.download_index_data(indexes, start_date, end_date)
-
-    # Чтение данных и проверка наличия столбца 'close'
-    dfs = {}
-    for ticker in tickers:
-        file_name = f"data/{ticker}_data.csv"
-        df = pd.read_csv(file_name, parse_dates=['begin'], index_col='begin')
-        if 'close' not in df.columns:
-            raise KeyError(f"Column 'close' not found in {file_name}")
-        dfs[ticker] = df
-
-    repo_file = "data/MOEXREPO_data.csv"
-    imoex_file = "data/IMOEX_data.csv"
-
-    df_repo = pd.read_csv(repo_file, parse_dates=['begin'], index_col='begin')
-    df_imoex = pd.read_csv(imoex_file, parse_dates=['begin'], index_col='begin')
-
-    # Рассчитываем лог. доходность
-    df_imoex['log_return'] = np.log(df_imoex['close'] / df_imoex['close'].shift(1))
-    market_return = df_imoex['log_return'].mean() * 252
-
-    # Используем поле 'close' MOEXREPO как безрисковую ставку
-    risk_free_rate = df_repo['close'].mean()
-
-    # Объединение данных
-    data = pd.concat([dfs[ticker]['log_return'] for ticker in tickers], axis=1)
-    data.columns = tickers
-    data.dropna(inplace=True)
-
-    # Параметры
-    window = 252
-    output_dir = "market_result"
-
-    # Построим графики для IMOEX
-    plot_cal_and_ef(data, risk_free_rate, output_file=os.path.join(output_dir, "cal_ef_imo.png"))
-    plot_cml(data, risk_free_rate, market_return, output_file=os.path.join(output_dir, "cml_imo.png"))
-
-    betas_imo, expected_returns_imoex = calculate_beta_and_expected_returns(data, market_return, risk_free_rate)
-    plot_sml(betas_imo, expected_returns_imoex, risk_free_rate, market_return, output_file=os.path.join(output_dir, "sml_imo.png"))
-
-    treynor_ratios_imoes = calculate_treynor_ratio(data, risk_free_rate)
-    plot_treynor_ratio(treynor_ratios_imoex, output_file=os.path.join(output_dir, "treynor_ratio_imoex.png"))
-
-    sortino_ratios_imoex = calculate_sortino_ratio(data, risk_free_rate)
-    plot_sortino_ratio(sortino_ratios_imoex, output_file=os.path.join(output_dir, "sortino_ratio_imoex.png"))
-
-    jensen_alphas_imoex = calculate_jensen_alpha(data, market_return, risk_free_rate)
-    plot_jensen_alpha(jensen_alphas_imoex, output_file=os.path.join(output_dir, "jensen_alpha_imoex.png"))
-
-    plot_dynamic_treynor_ratio(data, dfs, tickers, window, risk_free_rate, output_file=os.path.join(output_dir, "treynor_ratio_dynamic_imo.png"))
-    plot_dynamic_sortino_ratio(data, dfs, tickers, window, risk_free_rate, output_file=os.path.join(output_dir, "sortino_ratio_dynamic_imo.png"))
-    plot_dynamic_jensen_alpha(data, dfs, tickers, window, risk_free_rate, market_return, output_file=os.path.join(output_dir, "jensen_alpha_dynamic_imo.png"))
 
 def get_statistics(weights, returns):
     weights = np.array(weights)  # Преобразование weights в массив NumPy
@@ -184,6 +121,8 @@ def plot_dynamic_indicator(ticker, ticker_data, indicator, indicator_label, outp
     plt.savefig(output_file)
     plt.close()
     
+    
+    
 def calculate_treynor_ratio(returns, risk_free_rate=0.03):
     betas, expected_returns = calculate_beta_and_expected_returns(returns, risk_free_rate)
     portfolio_return = returns.mean().mean() * 252
@@ -202,26 +141,134 @@ def calculate_jensen_alpha(returns, market_return, risk_free_rate=0.03):
     jensen_alphas = {ticker: returns[ticker].mean() * 252 - (risk_free_rate + betas[ticker] * (market_return - risk_free_rate)) for ticker in returns.columns}
     return jensen_alphas
 
+        
+def plot_treynor_ratio(treynor_ratios, output_file="treynor_ratio.png"):
+    plt.figure()
+    plt.bar(treynor_ratios.keys(), treynor_ratios.values(), color='blue')
+    plt.xlabel('Tickers')
+    plt.ylabel('Treynor Ratio')
+    plt.title('Treynor Ratio for Assets')
+    plt.grid(True)
+    plt.savefig(output_file)
+    plt.close()
 
-def plot_dynamic_treynor_ratio(data, dfs, tickers, window, risk_free_rate=0.03, output_file="treynor_ratio_dynamic.png"):
+def plot_sortino_ratio(sortino_ratios, output_file="sortino_ratio.png"):
+    plt.figure()
+    plt.bar(sortino_ratios.keys(), sortino_ratios.values(), color='green')
+    plt.xlabel('Tickers')
+    plt.ylabel('Sortino Ratio')
+    plt.title('Sortino Ratio for Assets')
+    plt.grid(True)
+    plt.savefig(output_file)
+    plt.close()
+
+def plot_jensen_alpha(jensen_alphas, output_file="jensen_alpha.png"):
+    plt.figure()
+    plt.bar(jensen_alphas.keys(), jensen_alphas.values(), color='red')
+    plt.xlabel('Tickers')
+    plt.ylabel("Jensen's Alpha")
+    plt.title("Jensen's Alpha for Assets")
+    plt.grid(True)
+    plt.savefig(output_file)
+    plt.close()
+
+
+
+def calculate_dynamic_ratios(data, market_return, risk_free_rate, window, ratio_func):
+    dynamic_ratios = pd.DataFrame(index=data.index, columns=data.columns)
+    for i in range(window, len(data)):
+        window_data = data.iloc[i-window:i]
+        market_return_window = market_return.iloc[i-window:i]
+        risk_free_rate_window = risk_free_rate.iloc[i-window:i].mean()
+        ratios = ratio_func(window_data, market_return_window, risk_free_rate_window)
+        for ticker in data.columns:
+            dynamic_ratios.at[data.index[i], ticker] = ratios[ticker]
+    return dynamic_ratios.dropna()
+
+def plot_dynamic_ratio(ratio_df, title, output_file):
+    ratio_df.plot(figsize=(14, 7))
+    plt.title(title)
+    plt.xlabel('Date')
+    plt.ylabel('Ratio')
+    plt.legend(loc='best')
+    plt.savefig(output_file)
+    plt.close()
+
+def main():
+    # Список тикеров
+    tickers = ['LKOH', 'SBER']
+    indexes = ['MOEXREPO', 'IMOEX']
+    
+    # Даты начала и конца периода
+    start_date = datetime(2014, 5, 9)
+    end_date = datetime(2024, 5, 9)
+
+    # Загрузка и сохранение данных
+    #dwn.download_and_save_data(tickers, start_date, end_date)
+    #dwn.download_index_data(indexes, start_date, end_date)
+
+    # Чтение данных и проверка наличия столбца 'close'
+    dfs = {}
     for ticker in tickers:
-        log_returns = data[ticker]
-        market_returns = data['IMOEX']
-        treynor_ratios = calculate_dynamic_treynor_ratio(log_returns, market_returns, window, risk_free_rate)
-        plot_dynamic_indicator(ticker, dfs[ticker], treynor_ratios, 'Treynor Ratio', output_file)
+        file_name = f"data/{ticker}_data.csv"
+        df = pd.read_csv(file_name, parse_dates=['begin'], index_col='begin')
+        if 'close' not in df.columns:
+            raise KeyError(f"Column 'close' not found in {file_name}")
+        dfs[ticker] = df
+    
+    
+    repo_file = "data/MOEXREPO_data.csv"
+    imoex_file = "data/IMOEX_data.csv"
 
-def plot_dynamic_sortino_ratio(data, dfs, tickers, window, risk_free_rate=0.03, output_file="sortino_ratio_dynamic.png"):
-    for ticker in tickers:
-        log_returns = data[ticker]
-        sortino_ratios = calculate_dynamic_sortino_ratio(log_returns, window, risk_free_rate)
-        plot_dynamic_indicator(ticker, dfs[ticker], sortino_ratios, 'Sortino Ratio', output_file)
+    df_repo = pd.read_csv(repo_file, parse_dates=['begin'], index_col='begin')
+    dfs['MOEXREPO'] = df_repo
+    df_imoex = pd.read_csv(imoex_file, parse_dates=['begin'], index_col='begin')
+    dfs['IMOEX'] = df_imoex
+    
+    print(dfs)
+    
+    # Рассчитываем лог. доходность
+    df_imoex['log_return'] = np.log(df_imoex['close'] / df_imoex['close'].shift(1))
+    market_return = df_imoex['log_return'].mean() * 252
 
-def plot_dynamic_jensen_alpha(data, dfs, tickers, window, risk_free_rate=0.03, market_return=0.1, output_file="jensen_alpha_dynamic.png"):
-    for ticker in tickers:
-        log_returns = data[ticker]
-        market_returns = data['IMOEX']
-        jensen_alphas = calculate_dynamic_jensen_alpha(log_returns, market_returns, window, risk_free_rate, market_return)
-        plot_dynamic_indicator(ticker, dfs[ticker], jensen_alphas, 'Jensen Alpha', output_file)
+    # Используем поле 'close' MOEXREPO как безрисковую ставку
+    risk_free_rate = df_repo['close'].mean()
 
+    # Объединение данных
+    data = pd.concat([dfs[ticker]['log_return'] for ticker in tickers], axis=1)
+    data.columns = tickers
+    data.dropna(inplace=True)
+
+    # Параметры
+    window = 252
+    output_dir = "market_result"
+
+    # Построим графики для IMOEX
+    plot_cal_and_ef(data, risk_free_rate, output_file=os.path.join(output_dir, "cal_ef_imo.png"))
+    plot_cml(data, risk_free_rate, market_return, output_file=os.path.join(output_dir, "cml_imo.png"))
+
+    betas_imo, expected_returns_imoex = calculate_beta_and_expected_returns(data, market_return, risk_free_rate)
+    plot_sml(betas_imo, expected_returns_imoex, risk_free_rate, market_return, output_file=os.path.join(output_dir, "sml_imo.png"))
+
+    treynor_ratios_imoex = calculate_treynor_ratio(data, risk_free_rate)
+    plot_treynor_ratio(treynor_ratios_imoex, output_file=os.path.join(output_dir, "treynor_ratio_imoex.png"))
+
+    sortino_ratios_imoex = calculate_sortino_ratio(data, risk_free_rate)
+    plot_sortino_ratio(sortino_ratios_imoex, output_file=os.path.join(output_dir, "sortino_ratio_imoex.png"))
+
+    jensen_alphas_imoex = calculate_jensen_alpha(data, market_return, risk_free_rate)
+    plot_jensen_alpha(jensen_alphas_imoex, output_file=os.path.join(output_dir, "jensen_alpha_imoex.png"))
+
+    
+     # Динамические коэффициенты
+    dynamic_treynor_ratios = calculate_dynamic_ratios(data, market_return, risk_free_rate, window, calculate_treynor_ratio)
+    plot_dynamic_ratio(dynamic_treynor_ratios, "Dynamic Treynor Ratios", os.path.join(output_dir, "treynor_ratio_dynamic_imoex.png"))
+
+    dynamic_sortino_ratios = calculate_dynamic_ratios(data, market_return, risk_free_rate, window, calculate_sortino_ratio)
+    plot_dynamic_ratio(dynamic_sortino_ratios, "Dynamic Sortino Ratios", os.path.join(output_dir, "sortino_ratio_dynamic_imoex.png"))
+
+    dynamic_jensen_alphas = calculate_dynamic_ratios(data, market_return, risk_free_rate, window, calculate_jensen_alpha)
+    plot_dynamic_ratio(dynamic_jensen_alphas, "Dynamic Jensen Alphas", os.path.join(output_dir, "jensen_alpha_dynamic_imoex.png"))
+    
 if __name__ == "__main__":
     main()
