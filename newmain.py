@@ -16,7 +16,6 @@ def main():
     start_date = datetime(2014, 5, 9)
     end_date = datetime(2024, 5, 9)
     
-    # Чтение данных
     data = {}
     for ticker in tickers + [index, risk_free_rate_ticker]:
         file_name = f"data/{ticker}_data.csv"
@@ -31,7 +30,6 @@ def main():
             print(f"File {file_name} not found.")
             return
 
-    # Проверка наличия данных для всех тикеров
     if not all(ticker in data for ticker in tickers + [index, risk_free_rate_ticker]):
         print("Not all data files are loaded correctly.")
         return
@@ -48,7 +46,6 @@ def main():
 
     combined_df.dropna(inplace=True)
     
-    # Убедитесь, что индекс называется 'date'
     combined_df.index.name = 'date'
     combined_df.to_csv('market_data.csv')
     
@@ -73,18 +70,13 @@ def get_statistics(weights, returns):
     return np.array([portfolio_return, portfolio_volatility])
 
 def add_cal_to_csv(file_path):
-    # Чтение данных из общего файла
     data = pd.read_csv(file_path, parse_dates=['date'], index_col='date')
-    
-    # Создание пустых столбцов для CAL значений
     data['CAL_LKOH'] = np.nan
     data['CAL_SBER'] = np.nan
 
     tickers = ['LKOH', 'SBER']
     
-    # Пройдёмся по каждой строке данных, начиная с 1, чтобы использовать данные до текущей даты
     for i in range(1, len(data)):
-        # Извлечение подмножества данных до текущей даты
         sub_data = data.iloc[:i]
         
         for ticker in tickers:
@@ -117,20 +109,15 @@ def add_cal_to_csv(file_path):
 
             # Добавляем CAL для текущего дня к соответствующему тикеру
             data.at[data.index[i], f'CAL_{ticker}'] = cal_value
-
-    # Сохранение данных обратно в файл
     data.to_csv(file_path)
     print("CAL values have been added to 'market_data.csv'.")
 
 def add_cml_to_csv(file_path):
-    # Чтение данных
     data = pd.read_csv(file_path, parse_dates=['date'], index_col='date')
     data['CML_LKOH'] = np.nan
     data['CML_SBER'] = np.nan
 
     tickers = ['LKOH', 'SBER']
-    
-    # Проход по каждой дате
     for i in range(1, len(data)):
         sub_data = data.iloc[:i]
         market_returns = sub_data['log_return_IMOEX']
@@ -142,10 +129,7 @@ def add_cml_to_csv(file_path):
         risk_free_rate = sub_data['risk_free_rate'].iloc[-1] / 100
         
         for ticker in tickers:
-            # Логарифмическая доходность текущего тикера
             returns = sub_data[f'log_return_{ticker}']
-            
-            # Волатильность текущего тикера
             ticker_volatility = returns.std() * np.sqrt(252)
 
             # Расчет CML
@@ -162,8 +146,6 @@ def add_sml_to_csv(file_path):
     data['SML_SBER'] = np.nan
 
     tickers = ['LKOH', 'SBER']
-    
-    # Проход по каждой дате
     for i in range(1, len(data)):
         sub_data = data.iloc[:i]
 
@@ -193,7 +175,6 @@ def add_treynor_ratio_to_csv(file_path):
 
     tickers = ['LKOH', 'SBER']
     
-    # Проход по каждой дате
     for i in range(1, len(data)):
         sub_data = data.iloc[:i]
         market_returns = sub_data['log_return_IMOEX']
@@ -218,14 +199,12 @@ def add_treynor_ratio_to_csv(file_path):
     print("Treynor Ratio values have been added to 'market_data.csv'.")
 
 def add_sortino_ratio_to_csv(file_path):
-    # Чтение данных
     data = pd.read_csv(file_path, parse_dates=['date'], index_col='date')
     data['Sortino_LKOH'] = np.nan
     data['Sortino_SBER'] = np.nan
 
     tickers = ['LKOH', 'SBER']
     
-    # Проход по каждой дате
     for i in range(1, len(data)):
         sub_data = data.iloc[:i]
 
@@ -247,14 +226,11 @@ def add_sortino_ratio_to_csv(file_path):
     print("Sortino Ratio values have been added to 'market_data.csv'.")
 
 def add_jensens_alpha_to_csv(file_path):
-    # Чтение данных
     data = pd.read_csv(file_path, parse_dates=['date'], index_col='date')
     data['Jensens_Alpha_LKOH'] = np.nan
     data['Jensens_Alpha_SBER'] = np.nan
 
     tickers = ['LKOH', 'SBER']
-    
-    # Проход по каждой дате
     for i in range(1, len(data)):
         sub_data = data.iloc[:i]
         market_returns = sub_data['log_return_IMOEX']
@@ -279,7 +255,6 @@ def add_jensens_alpha_to_csv(file_path):
     print("Jensen's Alpha values have been added to 'market_data.csv'.")
 
 def static_plots(file_path):
-    # Чтение данных
     data = pd.read_csv(file_path, parse_dates=['date'], index_col='date')
     
     # Подготовка данных для графиков
@@ -346,7 +321,6 @@ def static_plots(file_path):
     plt.savefig('CML_CAL_SML.png')
 
 def plot_performance_ratios(file_path):
-    # Чтение данных
     data = pd.read_csv(file_path, parse_dates=['date'], index_col='date', skiprows=range(2, 252))
     
     tickers = ['LKOH', 'SBER']
@@ -364,6 +338,6 @@ def plot_performance_ratios(file_path):
     plt.tight_layout()
     plt.show()
     plt.savefig('TreynorSortinoJensensAlpha.png')
-# Вызов главной функции
+
 if __name__ == "__main__":
     main()
