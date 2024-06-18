@@ -194,6 +194,57 @@ def plot_dynamic_ratio(ratio_df, title, output_file):
     plt.savefig(output_file)
     plt.close()
 
+
+def get_statistics(weights, returns):
+    weights = np.array(weights)
+    portfolio_return = np.dot(weights, returns.mean()) * 252
+    portfolio_volatility = np.sqrt(np.dot(weights.T, np.dot(returns.cov() * 252, weights)))
+    return np.array([portfolio_return, portfolio_volatility])
+
+def add_cal_to_csv(file_path):
+    # Чтение данных из общего файла
+    data = pd.read_csv(file_path, parse_dates=['date'], index_col='date')
+    
+    # Создание пустых столбцов для CAL значений
+    data['CAL_LKOH'] = np.nan
+    data['CAL_SBER'] = np.nan
+
+    # Пройдёмся по каждой строке данных, начиная с 1, чтобы использовать данные до текущей даты
+    for i in range(1, len(data)):
+        # Извлечение подмножества данных до текущей даты
+        sub_data = data.iloc[:i]
+        
+        # Извлечение логарифмических доходностей
+        returns = sub_data[[f'log_return_{ticker}' for ticker in ['LKOH', 'SBER']]]
+
+        # Безрисковая ставка (используем значение предыдущего дня, деленное на 100)
+        risk_free_rate = sub_data['risk_free_rate'].iloc[-1] / 100
+        
+        num_assets = returns.shape[1]
+        bounds = tuple((0, 1) for _ in range(num_assets))
+        constraints = {'type': 'eq', 'fun': lambda x: np.sum(x) - 1}
+
+        result = minimize(lambda weights: get_statistics(weights, returns)[1], 
+                          num_assets * [1. / num_assets], 
+                          method='SLSQP', 
+                          bounds=bounds, 
+                          constraints=constraints)
+
+        weights = result.x
+        opt_return, opt_volatility = get_statistics(weights, returns)
+        max_sharpe_ratio = (opt_return - risk_free_rate) / opt_volatility
+        
+        # Рассчитываем значение CAL для текущего дня
+        cal_value = risk_free_rate + max_sharpe_ratio * opt_volatility
+
+        # Добавляем CAL для текущего дня к соответствующим тикерам
+        data.at[data.index[i], 'CAL_LKOH'] = cal_value
+        data.at[data.index[i], 'CAL_SBER'] = cal_value
+
+    # Сохранение данных обратно в файл
+    data.to_csv(file_path)
+    print("CAL values have been added to 'market_data.csv'.")
+
 def main():
     # Список тикеров
     tickers = ['LKOH', 'SBER']
@@ -225,6 +276,24 @@ def main():
     df_imoex = pd.read_csv(imoex_file, parse_dates=['begin'], index_col='begin')
     dfs['IMOEX'] = df_imoex
     
+    # Создание общего DataFrame
+    combined_df = pd.DataFrame(index=data[tickers[0]].index)
+    for ticker in tickers:
+        combined_df[f'close_{ticker}'] = data[ticker]['close']
+        combined_df[f'log_return_{ticker}'] = np.log(data[ticker]['close'] / data[ticker]['close'].shift(1))
+
+    combined_df[f'close_{index}'] = data[index]['close']
+    combined_df[f'log_return_{index}'] = np.log(data[index]['close'] / data[index]['close'].shift(1))
+    combined_df['risk_free_rate'] = data[risk_free_rate_ticker]['close'] / 100
+
+    combined_df.dropna(inplace=True)
+    combined_df.to_csv('market_data.csv')
+    
+    print("Data has been combined and saved to 'market_data.csv'.")
+    
+    # Вызываем функции для анализа данных
+    run_analysis('market_data.csv')
+    
     print(dfs)
     
     # Рассчитываем лог. доходность
@@ -242,13 +311,16 @@ def main():
     # Параметры
     window = 252
     output_dir = "market_result"
-
+    
+    file_path = 'market_data.csv'
+    add_cal_to_csv(file_path)
+"""
     # Построим графики для IMOEX
-    plot_cal_and_ef(data, risk_free_rate, output_file=os.path.join(output_dir, "cal_ef_imo.png"))
-    plot_cml(data, risk_free_rate, market_return, output_file=os.path.join(output_dir, "cml_imo.png"))
+    plot_cal_and_ef(data, risk_free_rate, output_file=os.path.join(output_dir, "cal_ef_imoex.png"))
+    plot_cml(data, risk_free_rate, market_return, output_file=os.path.join(output_dir, "cml_imoex.png"))
 
     betas_imo, expected_returns_imoex = calculate_beta_and_expected_returns(data, market_return, risk_free_rate)
-    plot_sml(betas_imo, expected_returns_imoex, risk_free_rate, market_return, output_file=os.path.join(output_dir, "sml_imo.png"))
+    plot_sml(betas_imo, expected_returns_imoex, risk_free_rate, market_return, output_file=os.path.join(output_dir, "sml_imoex.png"))
 
     treynor_ratios_imoex = calculate_treynor_ratio(data, risk_free_rate)
     plot_treynor_ratio(treynor_ratios_imoex, output_file=os.path.join(output_dir, "treynor_ratio_imoex.png"))
@@ -269,6 +341,6 @@ def main():
 
     dynamic_jensen_alphas = calculate_dynamic_ratios(data, market_return, risk_free_rate, window, calculate_jensen_alpha)
     plot_dynamic_ratio(dynamic_jensen_alphas, "Dynamic Jensen Alphas", os.path.join(output_dir, "jensen_alpha_dynamic_imoex.png"))
-    
+"""
 if __name__ == "__main__":
     main()
